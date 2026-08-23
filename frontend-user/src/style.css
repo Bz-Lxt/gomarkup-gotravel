@@ -1,0 +1,43 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+html, body, #app {
+  height: 100%;
+  background: #0E1612;
+}
+
+body {
+  font-family: Outfit, "Noto Sans SC", sans-serif;
+  color: #F3E8D4;
+}
+
+select {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpolyline points='1,1 6,6 11,1' fill='none' stroke='%23999' stroke-width='1.6'/%3E%3C/svg%3E");
+  background-position: right 12px center;
+  background-repeat: no-repeat;
+  padding-right: 36px;
+}
+
+.grain {
+  background-image:
+    radial-gradient(ellipse at 20% 0%, rgba(232, 160, 74, 0.12), transparent 42%),
+    radial-gradient(ellipse at 90% 80%, rgba(47, 111, 78, 0.28), transparent 50%),
+    url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.12'/%3E%3C/svg%3E");
+}
+
+.leaflet-container {
+  background: #101a14;
+  font-family: Outfit, "Noto Sans SC", sans-serif;
+}
+
+.map-ink .leaflet-tile {
+  filter: grayscale(0.35) saturate(0.7) brightness(0.72) sepia(0.15);
+}
+
+.field-err { color: #F3A27A; font-size: 12px; margin-top: 4px; }
