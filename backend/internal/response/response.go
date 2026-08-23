@@ -10,9 +10,13 @@ import (
 	"gotravel/internal/logger"
 )
 
-var jsonScratch struct {
-	sync.Mutex
-	bytes.Buffer
+// bufPool provides per-request scratch buffers. Unlike a single shared
+// buffer, each Get returns an independent buffer, so concurrent handlers
+// can encode and write without aliasing each other's payload. The buffer
+// is returned to the pool only after w.Write has copied the bytes, so
+// recycling is safe even under slow clients.
+var bufPool = sync.Pool{
+	New: func() any { return new(bytes.Buffer) },
 }
 
 type Envelope struct {
@@ -25,12 +29,11 @@ type Envelope struct {
 func JSON(w http.ResponseWriter, status int, data any) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(status)
-	jsonScratch.Lock()
-	jsonScratch.Reset()
-	_ = json.NewEncoder(&jsonScratch.Buffer).Encode(Envelope{OK: status < 400, Data: data})
-	payload := jsonScratch.Bytes()
-	jsonScratch.Unlock()
-	_, _ = w.Write(payload)
+	buf := bufPool.Get().(*bytes.Buffer)
+	buf.Reset()
+	defer bufPool.Put(buf)
+	_ = json.NewEncoder(buf).Encode(Envelope{OK: status < 400, Data: data})
+	_, _ = w.Write(buf.Bytes())
 }
 
 func Fail(w http.ResponseWriter, err error) {
