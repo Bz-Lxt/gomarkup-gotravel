@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"gotravel/internal/apperr"
 )
 
 // Compute calls a real OSRM route service when BaseURL is set.
@@ -27,9 +29,20 @@ func (o OSRMProvider) ComputeHTTP(client *http.Client, points []Point) (Distance
 	}
 	resp, err := client.Get(url)
 	if err != nil {
-		return DistanceResult{}, fmt.Errorf("osrm: %w", err)
+		return DistanceResult{}, apperr.New(http.StatusBadGateway, apperr.GeoUnavailable, "osrm: "+err.Error())
 	}
 	defer resp.Body.Close()
+	// The upstream status code is authoritative. A rate-limited (429) or
+	// otherwise failing response must not be accepted even when the body
+	// happens to be syntactically valid JSON: OSRM occasionally returns 429
+	// carrying a stale, otherwise well-formed route payload. Decoding the
+	// body first and then gating on parsed.Code/parsed.Routes let that stale
+	// payload masquerade as a fresh result, so the trip distance got updated
+	// with outdated numbers and the client saw a 200. Reject by status before
+	// trusting anything in the body.
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return DistanceResult{}, osrmHTTPError(resp.StatusCode)
+	}
 	var parsed struct {
 		Code   string `json:"code"`
 		Routes []struct {
@@ -40,13 +53,10 @@ func (o OSRMProvider) ComputeHTTP(client *http.Client, points []Point) (Distance
 		} `json:"routes"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&parsed); err != nil {
-		return DistanceResult{}, fmt.Errorf("osrm decode: %w", err)
+		return DistanceResult{}, apperr.New(http.StatusBadGateway, apperr.GeoUnavailable, "osrm decode: "+err.Error())
 	}
 	if parsed.Code != "Ok" || len(parsed.Routes) == 0 {
-		if resp.StatusCode >= 400 {
-			return DistanceResult{}, fmt.Errorf("osrm status %d", resp.StatusCode)
-		}
-		return DistanceResult{}, fmt.Errorf("osrm code %s", parsed.Code)
+		return DistanceResult{}, apperr.New(http.StatusBadGateway, apperr.GeoUnavailable, "osrm code "+parsed.Code)
 	}
 	res := DistanceResult{Segments: []Segment{}, WalkKmh: 4.5, Provider: "osrm", TotalMeters: parsed.Routes[0].Distance}
 	for i, leg := range parsed.Routes[0].Legs {
@@ -56,6 +66,17 @@ func (o OSRMProvider) ComputeHTTP(client *http.Client, points []Point) (Distance
 		res.ETAMinutes = (res.TotalMeters / 1000) / res.WalkKmh * 60
 	}
 	return res, nil
+}
+
+// osrmHTTPError maps a non-2xx upstream status to a client-facing error. A
+// rate-limit (429) is surfaced as RATE_LIMITED so callers can distinguish it
+// from a generic upstream outage; any other failure becomes GEO_UNAVAILABLE.
+// The response body is intentionally not parsed -- it cannot be trusted.
+func osrmHTTPError(status int) error {
+	if status == http.StatusTooManyRequests {
+		return apperr.New(http.StatusTooManyRequests, apperr.RateLimited, "osrm rate limited")
+	}
+	return apperr.New(http.StatusBadGateway, apperr.GeoUnavailable, fmt.Sprintf("osrm status %d", status))
 }
 
 func (o OSRMProvider) Compute(points []Point) (DistanceResult, error) {
