@@ -1,0 +1,111 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      TZ: Asia/Shanghai
+      POSTGRES_USER: gotravel
+      POSTGRES_PASSWORD: gotravel
+      POSTGRES_DB: gotravel
+    ports:
+      - "27183:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gotravel -d gotravel"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    environment:
+      TZ: Asia/Shanghai
+    ports:
+      - "27184:6379"
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    environment:
+      TZ: Asia/Shanghai
+      HTTP_ADDR: ":8080"
+      DATABASE_URL: postgres://gotravel:gotravel@postgres:5432/gotravel?sslmode=disable
+      REDIS_ADDR: redis:6379
+      JWT_SECRET: gotravel-dev-secret-change-me
+      GEO_INDEX_BACKEND: rtree
+      ROUTE_PROVIDER: haversine
+      GPS_PROVIDER: sim
+      UPLOAD_DIR: /data/uploads
+      CORS_ORIGIN: http://localhost:27181
+    ports:
+      - "27182:8080"
+    volumes:
+      - uploads:/data/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/api/v1/health"]
+      interval: 8s
+      timeout: 4s
+      retries: 12
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend-user
+      dockerfile: Dockerfile
+    environment:
+      TZ: Asia/Shanghai
+    ports:
+      - "27181:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/"]
+      interval: 8s
+      timeout: 4s
+      retries: 8
+    restart: unless-stopped
+
+  qa:
+    image: python:3.12-alpine
+    environment:
+      TZ: Asia/Shanghai
+      API_BASE: http://backend:8080
+      PYTHONIOENCODING: utf-8
+    volumes:
+      - ./tests:/tests:ro
+    working_dir: /tests
+    depends_on:
+      backend:
+        condition: service_healthy
+    profiles: ["qa"]
+    command: ["python", "api_smoke.py"]
+
+  e2e:
+    build:
+      context: ./tests
+    environment:
+      TZ: Asia/Shanghai
+      E2E_BASE: http://frontend
+    depends_on:
+      frontend:
+        condition: service_healthy
+    profiles: ["qa"]
+
+volumes:
+  pgdata:
+  uploads:
