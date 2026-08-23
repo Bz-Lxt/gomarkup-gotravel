@@ -66,7 +66,7 @@ type rtSet struct {
 }
 
 func NewRTreeIndex() *RTreeIndex {
-	return &RTreeIndex{}
+	return &RTreeIndex{sets: make(map[string]*rtSet)}
 }
 
 func (x *RTreeIndex) Backend() string { return "rtree" }
