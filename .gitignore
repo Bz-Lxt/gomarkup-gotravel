@@ -1,0 +1,44 @@
+# Binaries
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+/backend/bin/
+/backend/tmp/
+
+# Go
+vendor/
+
+# Node
+node_modules/
+dist/
+.vite/
+*.local
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+
+# IDE
+.idea/
+.vscode/
+*.swp
+.DS_Store
+
+# Test / coverage
+coverage/
+*.cover
+.pytest_cache/
+playwright-report/
+test-results/
+
+# Uploads (runtime)
+/data/
+/backend/uploads/
+
+# Docker leftovers
+*.log
